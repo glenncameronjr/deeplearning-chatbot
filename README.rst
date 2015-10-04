@@ -5,6 +5,7 @@ This project aims at developing a chatbot that uses recurrent neural networks tr
 ### How do I get set up? ###
 
 First install the dependencies (Theano, [Keras](http://keras.io)):
+
 ```
 #!python
 
