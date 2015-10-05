@@ -16,5 +16,5 @@ Then, run it:
 ```
 #!python
 
-python chatbot.py data/lacollectioneuse.txt
+python lstm2.py data/lacollectioneuse.txt
 ```
