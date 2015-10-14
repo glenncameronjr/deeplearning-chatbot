@@ -1,18 +1,22 @@
 """
 Usage:
-    lstm_text_generation.py <FILE>
+    lstm_text_generation.py <DIR>
 
 Options:
-    <FILE>      File containing parsed subtitles (e.g., data/lacollectioneuse.txt)
+    <DIR>      Directory containing parsed subtitles (e.g., data/lacollectioneuse.txt)
 """
 from __future__ import print_function
-from keras.models import Sequential
+from keras.models import Sequential, model_from_json
 from keras.optimizers import Adagrad
 from keras.layers.core import Dense, Activation, Dropout
 from keras.layers.recurrent import LSTM
 from keras.datasets.data_utils import get_file
+
+from os import path
 import numpy as np
 import random, sys
+import re
+from glob import glob
 
 from docopt import docopt
 args = docopt(__doc__)
@@ -30,18 +34,24 @@ args = docopt(__doc__)
     has at least ~100k characters. ~1M is better.
 '''
 
-fh = open(args["<FILE>"], 'ro')
-text = fh.read().lower()
-fh.close()
-print('corpus length:', len(text))
+_text = ''
+for fname in glob(path.join(args["<DIR>"], '*.txt')):
+    print("Reading file: %s" % fname)
+    fh = open(fname, 'ro')
+    _text += fh.read().lower().decode('utf-8')
+    fh.close()
+print('corpus length:', len(_text))
 
+text = []
+for w in re.finditer(r"(\w+)", _text, re.MULTILINE | re.DOTALL | re.UNICODE):
+    text.append(w.group(1))
 chars = set(text)
 print('total chars:', len(chars))
 char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
 # cut the text in semi-redundant sequences of maxlen characters
-maxlen = 20
+maxlen = 7
 step = 3
 sentences = []
 next_chars = []
@@ -58,20 +68,21 @@ for i, sentence in enumerate(sentences):
         X[i, t, char_indices[char]] = 1
     y[i, char_indices[next_chars[i]]] = 1
 
-
 # build the model: 2 stacked LSTM
 try:
+    print('Loading model...')
     fh = open('keras.model.json', 'rb')
     model = model_from_json(fh.read())
     fh.close()
-except:
+except Exception as error:
+    print(error)
     print('Build model...')
     model = Sequential()
-    model.add(LSTM(len(chars), 64, activation='sigmoid', return_sequences=True))
+    model.add(LSTM(len(chars), 128, activation='sigmoid', return_sequences=True))
     model.add(Dropout(0.2))
-    model.add(LSTM(64, 64, activation='sigmoid', return_sequences=False))
+    model.add(LSTM(128, 128, activation='sigmoid', return_sequences=False))
     model.add(Dropout(0.2))
-    model.add(Dense(64, len(chars)))
+    model.add(Dense(128, len(chars)))
     model.add(Activation('softmax'))
 
     adagrad = Adagrad(lr=0.01, epsilon=1e-6, clipnorm=1.)
@@ -103,8 +114,8 @@ for iteration in range(1, 60):
 
         generated = ''
         sentence = text[start_index : start_index + maxlen]
-        generated += sentence
-        print('----- Generating with seed: "' + sentence + '"')
+        generated += " ".join(sentence).encode('utf-8')
+        print('----- Generating with seed: "' + " ".join(sentence).encode('utf-8') + '"')
         sys.stdout.write(generated)
 
         for iteration in range(400):
@@ -116,9 +127,9 @@ for iteration in range(1, 60):
             next_index = sample(preds, diversity)
             next_char = indices_char[next_index]
 
-            generated += next_char
-            sentence = sentence[1:] + next_char
+            # generated += next_char
+            # sentence = sentence[1:] + next_char
 
-            sys.stdout.write(next_char)
+            sys.stdout.write(' ' + next_char.encode('utf-8'))
             sys.stdout.flush()
         print()
