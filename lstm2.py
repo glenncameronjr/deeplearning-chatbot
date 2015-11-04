@@ -12,7 +12,7 @@ from keras.layers.core import Dense, Activation, Dropout
 from keras.layers.recurrent import LSTM
 from keras.datasets.data_utils import get_file
 
-from os import path
+from os import path, symlink
 import numpy as np
 import random, sys
 import re
@@ -38,7 +38,7 @@ _text = ''
 for fname in glob(path.join(args["<DIR>"], '*.txt')):
     print("Reading file: %s" % fname)
     fh = open(fname, 'ro')
-    _text += fh.read().lower().decode('utf-8')
+    _text += fh.read().decode('utf-8').lower()
     fh.close()
 print('corpus length:', len(_text))
 
@@ -51,7 +51,7 @@ char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
 # cut the text in semi-redundant sequences of maxlen characters
-maxlen = 7
+maxlen = 20
 step = 3
 sentences = []
 next_chars = []
@@ -68,27 +68,29 @@ for i, sentence in enumerate(sentences):
         X[i, t, char_indices[char]] = 1
     y[i, char_indices[next_chars[i]]] = 1
 
+
 # build the model: 2 stacked LSTM
 try:
     print('Loading model...')
-    fh = open('keras.model.json', 'rb')
+    fh = open('keras-manos.model.json', 'rb')
     model = model_from_json(fh.read())
     fh.close()
 except Exception as error:
     print(error)
     print('Build model...')
     model = Sequential()
-    model.add(LSTM(128, input_dim=len(chars), activation='sigmoid', return_sequences=True))
+    model.add(LSTM(512, input_shape=(maxlen, len(chars)), activation='sigmoid', return_sequences=True))
     model.add(Dropout(0.2))
-    model.add(LSTM(128, input_dim=128, activation='sigmoid', return_sequences=False))
+    model.add(LSTM(512, activation='sigmoid', return_sequences=False))
     model.add(Dropout(0.2))
-    model.add(Dense(len(chars), input_dim=128))
+    model.add(Dense(len(chars)))
     model.add(Activation('softmax'))
 
-    adagrad = Adagrad(lr=0.01, epsilon=1e-6, clipnorm=1.)
-    model.compile(loss='binary_crossentropy', optimizer=adagrad)
+#    adagrad = Adagrad(lr=0.01, epsilon=1e-6, clipnorm=1.)
+#    model.compile(loss='binary_crossentropy', optimizer=adagrad)
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
     
-    fh = open('keras.model.json', 'wb')
+    fh = open('keras-manos.model.json', 'wb')
     fh.write(model.to_json())
     fh.close()
     
@@ -99,8 +101,12 @@ def sample(a, temperature=1.0):
     a = np.exp(a)/np.sum(np.exp(a))
     return np.argmax(np.random.multinomial(1,a,1))
 
+# Load previous weights
+if path.isfile('keras-manos.weights.latest.h5'):
+    model.load_weights('keras-manos.weights.latest.h5')
+
 # train the model, output generated text after each iteration
-for iteration in range(1, 60):
+for iteration in range(1, 3):
     print()
     print('-' * 50)
     print('Iteration', iteration)
@@ -118,7 +124,7 @@ for iteration in range(1, 60):
         print('----- Generating with seed: "' + " ".join(sentence).encode('utf-8') + '"')
         sys.stdout.write(generated)
 
-        for iteration in range(400):
+        for _ in range(400):
             x = np.zeros((1, maxlen, len(chars)))
             for t, char in enumerate(sentence):
                 x[0, t, char_indices[char]] = 1.
@@ -133,3 +139,6 @@ for iteration in range(1, 60):
             sys.stdout.write(' ' + next_char.encode('utf-8'))
             sys.stdout.flush()
         print()
+
+    model.save_weights('keras-manos.weights.iter-%d.h5' % iteration)
+    symlink('keras-manos.weights.iter-%d.h5' % iteration, 'keras-manos.weights.latest.h5')
