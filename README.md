@@ -18,3 +18,5 @@ Then, run it:
 
 python lstm2.py data/lacollectioneuse.txt
 ```
+
+# learning from Manos Tsagkias #
